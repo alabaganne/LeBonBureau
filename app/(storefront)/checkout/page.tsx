@@ -3,13 +3,14 @@
 /* Checkout — three-step delivery form (coordinates, address, payment) with a
    live order summary, validation, and an inline confirmation screen. */
 
-import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { formatDT, GOVERNORATES, photoImg } from "@/lib/data";
+import { formatDT, GOVERNORATES, imageOr } from "@/lib/data";
 import { useCart } from "@/lib/cart";
 import { useToast } from "@/lib/toast";
-import { makeOrderNum, saveOrder, type Order } from "@/lib/orders";
+import { placeOrder } from "@/lib/orders";
+import { pixel } from "@/lib/track";
 import Button from "@/components/Button";
 import { ArrowLeftIcon, LockIcon, CheckBigIcon } from "@/components/Icons";
 
@@ -27,11 +28,26 @@ const REQUIRED = ["firstName", "lastName", "phone", "address", "city", "gov", "z
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { items, ready, qty, total, clearCart } = useCart();
+  const { items, ready, qty, total, clearCart, cartId } = useCart();
   const { toast } = useToast();
 
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
+  const [busy, setBusy] = useState(false);
+  const checkoutSent = useRef(false);
+
+  useEffect(() => {
+    if (!ready || !items.length || checkoutSent.current) return;
+    checkoutSent.current = true;
+    pixel("InitiateCheckout", {
+      content_ids: items.map((i) => i.productId),
+      content_type: "product",
+      contents: items.map((i) => ({ id: i.productId, quantity: i.qty, item_price: i.price })),
+      num_items: qty,
+      value: total,
+      currency: "TND",
+    });
+  }, [ready, items, qty, total]);
 
   // Empty cart → back to cart (unless we just confirmed an order).
   useEffect(() => {
@@ -93,29 +109,22 @@ export default function CheckoutPage() {
       zip: get("zip").trim(),
       landmark: get("landmark").trim(),
       notes: get("notes").trim(),
-      payment: ((form.querySelector('input[name="payment"]:checked') as HTMLInputElement)?.value ||
-        "cod") as "cod" | "card",
     };
 
-    const order: Order = {
-      num: makeOrderNum(),
-      createdAt: new Date().toISOString(),
-      status: "nouvelle",
-      ...data,
-      items,
-      total,
-    };
-
+    if (!cartId || busy) return;
+    setBusy(true);
+    let order;
     try {
-      await saveOrder(order);
+      order = await placeOrder(cartId, data);
     } catch {
       toast("Une erreur est survenue lors de l'envoi. Merci de réessayer.");
+      setBusy(false);
       return;
     }
 
     setConfirmation({
       firstName: data.firstName,
-      num: order.num,
+      num: order.ref,
       addr:
         data.address +
         (data.address2 ? ", " + data.address2 : "") +
@@ -126,9 +135,9 @@ export default function CheckoutPage() {
         " " +
         data.zip,
       phone: "+216 " + data.phone,
-      pay: data.payment === "card" ? "Carte bancaire" : "À la livraison (espèces)",
+      pay: "À la livraison (espèces)",
       itemsCount: qty,
-      total,
+      total: order.total,
     });
     clearCart();
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -286,16 +295,16 @@ export default function CheckoutPage() {
           <h3 className="font-serif text-6 mb-[18px]">Votre commande</h3>
           <ul className="list-none mb-4 p-0 grid gap-3">
             {items.map((it) => (
-              <li key={it.id + it.color + it.size} className="flex gap-3 items-center text-[14px]">
+              <li key={it.id} className="flex gap-3 items-center text-[14px]">
                 <div className="w-[46px] h-[46px] rounded-[9px] overflow-hidden bg-sand-deep flex-none border border-line">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={photoImg(it.photo, it.name, 160, 160)} alt={it.name} className="w-full h-full object-cover" />
+                  <img src={imageOr(it.image, it.name, 160, 160)} alt={it.name} className="w-full h-full object-cover" />
                 </div>
                 <div className="flex-1 leading-[1.3]">
                   <div className="font-semibold">
                     {it.name} <span style={{ color: "var(--ink-faint)", fontWeight: 500 }}>×{it.qty}</span>
                   </div>
-                  <div className="text-ink-faint text-[12.5px]">{it.color} · {it.size}</div>
+                  <div className="text-ink-faint text-[12.5px]">{[it.color, it.size].filter(Boolean).join(" · ")}</div>
                 </div>
                 <div className="font-semibold whitespace-nowrap">{formatDT(it.price * it.qty)}</div>
               </li>
@@ -310,7 +319,7 @@ export default function CheckoutPage() {
           <hr className="border-0 border-t border-line my-3" />
           <div className="flex justify-between items-baseline pt-[6px] pb-[18px]"><span className="font-semibold text-[16px]">Total à payer</span><span className="font-serif text-[28px] font-semibold tracking-[-.01em] whitespace-nowrap">{formatDT(total)}</span></div>
           <div className="mt-1">
-            <Button variant="primary" size="lg" block type="submit">Confirmer la commande</Button>
+            <Button variant="primary" size="lg" block type="submit" disabled={busy}>{busy ? "Envoi…" : "Confirmer la commande"}</Button>
             <p className="text-[12.5px] text-ink-faint text-center mt-[14px]">En confirmant, vous acceptez nos conditions générales de vente.</p>
           </div>
         </aside>

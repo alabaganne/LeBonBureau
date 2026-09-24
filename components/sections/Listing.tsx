@@ -4,10 +4,26 @@
 
 import { useState } from "react";
 import ProductCard from "@/components/ProductCard";
-import { CATEGORIES, type CategoryId, type Product } from "@/lib/data";
+import type { Product } from "@/lib/data";
 
-export default function Listing({ products }: { products: Product[] }) {
-  const [activeFilter, setActiveFilter] = useState<CategoryId>("tous");
+export default function Listing({
+  products,
+  initialFilter,
+}: {
+  products: Product[];
+  initialFilter?: string;
+}) {
+  // Les catégories viennent de Medusa : une puce par catégorie qui a des bureaux.
+  const categories = [
+    { id: "tous", label: "Tous les bureaux" },
+    ...products
+      .filter((p, i) => p.category && products.findIndex((q) => q.category === p.category) === i)
+      .map((p) => ({ id: p.category, label: p.categoryLabel })),
+  ];
+
+  const [activeFilter, setActiveFilter] = useState(
+    categories.some((c) => c.id === initialFilter) ? initialFilter! : "tous"
+  );
 
   const list = products.filter((p) => activeFilter === "tous" || p.category === activeFilter);
 
@@ -17,7 +33,7 @@ export default function Listing({ products }: { products: Product[] }) {
     (activeFilter === "tous"
       ? ""
       : " · catégorie " +
-        (CATEGORIES.find((c) => c.id === activeFilter)?.label.toLowerCase() ?? ""));
+        (categories.find((c) => c.id === activeFilter)?.label.toLowerCase() ?? ""));
 
   return (
     <section className="pt-[76px] pb-10" id="catalogue">
@@ -34,7 +50,7 @@ export default function Listing({ products }: { products: Product[] }) {
             </p>
           </div>
           <div className="flex flex-wrap gap-2.5">
-            {CATEGORIES.map((c) => (
+            {categories.map((c) => (
               <button
                 key={c.id}
                 className={

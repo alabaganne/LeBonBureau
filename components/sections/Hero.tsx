@@ -1,9 +1,9 @@
-/* Landing hero — headline, stat strip, and the floating best-seller card. */
+/* Landing hero — headline, stat strip, and the card of the featured (Best-seller) desk. */
 
 import Button from "@/components/Button";
-import { img } from "@/lib/data";
+import { imageOr, type Product } from "@/lib/data";
 
-export default function Hero() {
+export default function Hero({ featured, count }: { featured?: Product; count: number }) {
   return (
     <section className="pt-16 pb-10">
       <div className="wrap grid grid-cols-[1.05fr_.95fr] gap-14 items-center max-[960px]:grid-cols-1 max-[960px]:gap-9">
@@ -30,8 +30,10 @@ export default function Hero() {
           </div>
           <div className="flex gap-[34px] mt-10 max-[560px]:gap-6">
             <div>
-              <div className="font-serif text-[30px] font-semibold leading-none">6</div>
-              <div className="text-[13.5px] text-ink-faint mt-[6px]">modèles sélectionnés</div>
+              <div className="font-serif text-[30px] font-semibold leading-none">{count}</div>
+              <div className="text-[13.5px] text-ink-faint mt-[6px]">
+                {count > 1 ? "modèles sélectionnés" : "modèle sélectionné"}
+              </div>
             </div>
             <div>
               <div className="font-serif text-[30px] font-semibold leading-none">10 ans</div>
@@ -45,20 +47,30 @@ export default function Hero() {
         </div>
         <div className="relative rounded-card-lg overflow-hidden aspect-[5/6] bg-sand-deep shadow-card max-[960px]:aspect-[5/4]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="w-full h-full object-cover" src={img(1957477, 760, 920)} alt="Bureau ergonomique en situation" />
-          <div className="absolute left-[18px] bottom-[18px] right-[18px] bg-white/92 backdrop-blur-[8px] rounded-[14px] px-[18px] py-[14px] flex items-center justify-between shadow-card">
-            <div>
-              <div className="font-semibold text-[15px]">Atlas · Assis-debout</div>
-              <div className="text-[13px] text-ink-faint">Le best-seller de la maison</div>
+          <img
+            className="w-full h-full object-cover"
+            src={imageOr(featured?.image, featured?.name ?? "LeBonBureau", 760, 920)}
+            alt={featured ? `Bureau ${featured.name}` : "Bureau ergonomique en situation"}
+          />
+          {featured && (
+            <div className="absolute left-[18px] bottom-[18px] right-[18px] bg-white/92 backdrop-blur-[8px] rounded-[14px] px-[18px] py-[14px] flex items-center justify-between shadow-card">
+              <div>
+                <div className="font-semibold text-[15px]">
+                  {featured.name} · {featured.categoryLabel}
+                </div>
+                <div className="text-[13px] text-ink-faint">
+                  {featured.badge === "Best-seller" ? "Le best-seller de la maison" : featured.sub}
+                </div>
+              </div>
+              <Button
+                href={`/product/${featured.id}`}
+                variant="dark"
+                style={{ padding: "10px 18px", fontSize: 14 }}
+              >
+                Découvrir
+              </Button>
             </div>
-            <Button
-              href="/product/atlas"
-              variant="dark"
-              style={{ padding: "10px 18px", fontSize: 14 }}
-            >
-              Découvrir
-            </Button>
-          </div>
+          )}
         </div>
       </div>
     </section>

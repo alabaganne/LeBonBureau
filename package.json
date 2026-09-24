@@ -7,20 +7,17 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "db:start": "supabase start",
-    "db:stop": "supabase stop",
-    "db:reset": "supabase db reset",
-    "seed:admin": "node scripts/seed-admin.mjs",
-    "seed:products": "node scripts/seed-products.mjs",
-    "db:seed": "npm run seed:products && npm run seed:admin"
+    "backend:dev": "npm --prefix backend run dev",
+    "backend:seed": "npm --prefix backend run seed"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.108.0",
+    "@medusajs/js-sdk": "2.21.1",
     "next": "^15.1.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@medusajs/types": "2.21.1",
     "@tailwindcss/postcss": "^4.3.2",
     "@types/node": "^22.10.7",
     "@types/react": "^19.0.7",

@@ -1,10 +1,11 @@
-/* Product detail page. Fetched from Supabase per request; the interactive buy
+/* Product detail page. Fetched from Medusa per request; the interactive buy
    box is a client island, while crumbs/specs/related render on the server. */
 
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getProduct, getProducts } from "@/lib/products";
+import type { Product } from "@/lib/data";
 import ProductBuyBox from "@/components/ProductBuyBox";
 import ProductCard from "@/components/ProductCard";
 import { CheckIcon } from "@/components/Icons";
@@ -19,7 +20,36 @@ export async function generateMetadata({
   const { id } = await params;
   const p = await getProduct(id);
   if (!p) return { title: "Produit introuvable" };
-  return { title: p.name, description: p.blurb };
+  return {
+    title: p.name,
+    description: p.blurb,
+    alternates: { canonical: `/product/${p.id}` },
+    openGraph: { title: p.name, description: p.blurb, images: p.images.slice(0, 1) },
+  };
+}
+
+/** Données structurées Google (prix, stock) pour les résultats enrichis.
+    Pas de note : Google exige de vrais avis clients. */
+function productJsonLd(p: Product) {
+  const inStock = p.variants.some((v) => v.stock === null || v.stock > 0);
+  return {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: p.name,
+    description: p.desc || p.blurb,
+    image: p.images,
+    sku: p.id,
+    category: p.categoryLabel,
+    brand: { "@type": "Brand", name: "LeBonBureau" },
+    offers: {
+      "@type": "AggregateOffer",
+      priceCurrency: "TND",
+      lowPrice: Math.min(...p.variants.map((v) => v.price)),
+      highPrice: Math.max(...p.variants.map((v) => v.price)),
+      offerCount: p.variants.length,
+      availability: inStock ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+    },
+  };
 }
 
 export default async function ProductPage({
@@ -35,6 +65,10 @@ export default async function ProductPage({
 
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd(p)).replace(/</g, "\\u003c") }}
+      />
       <div className="wrap">
         <nav className="pt-[26px] pb-[6px] text-[14px] text-ink-faint flex gap-[8px] items-center">
           <Link href="/" className="hover:text-ink">Accueil</Link>

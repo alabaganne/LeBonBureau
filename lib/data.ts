@@ -1,24 +1,34 @@
-/* LeBonBureau — catalogue types, category config, and image/format helpers.
-   The product data itself lives in Supabase (see lib/products.ts); this module
-   holds the shared types and pure helpers used across the storefront. */
-
-export type CategoryId = "tous" | "gaming" | "programmation" | "assis-debout";
+/* LeBonBureau — types du catalogue et petits outils (prix, images).
+   Les produits eux-mêmes viennent de Medusa (voir lib/products.ts). */
 
 export interface Color {
   name: string;
   hex: string;
 }
 
+/** Une déclinaison achetable : une finition × une dimension. */
+export interface Variant {
+  id: string;
+  color: string;
+  size: string;
+  price: number;
+  oldPrice: number | null;
+  /** null quand Medusa ne suit pas le stock de cette déclinaison. */
+  stock: number | null;
+}
+
 export interface Product {
+  /** Le handle Medusa, utilisé dans l'URL /product/[id]. */
   id: string;
   name: string;
   sub: string;
-  photo: number;
-  photos: number[];
+  image: string;
+  images: string[];
   rating: number;
   reviews: number;
-  stock: number;
-  category: Exclude<CategoryId, "tous">;
+  /** Nombre de commandes non annulées (preuve sociale). */
+  orders: number;
+  category: string;
   categoryLabel: string;
   price: number;
   oldPrice: number | null;
@@ -27,25 +37,12 @@ export interface Product {
   desc: string;
   colors: Color[];
   sizes: string[];
+  variants: Variant[];
   specs: [string, string][];
   features: [string, string][];
-  tags: string[];
 }
 
-export interface Category {
-  id: CategoryId;
-  label: string;
-}
-
-
-export const CATEGORIES: Category[] = [
-  { id: "tous", label: "Tous les bureaux" },
-  { id: "gaming", label: "Gaming" },
-  { id: "programmation", label: "Programmation" },
-  { id: "assis-debout", label: "Assis-debout" },
-];
-
-/** The 24 Tunisian governorates, used in delivery address selects. */
+/** Les 24 gouvernorats, pour les formulaires de livraison. */
 export const GOVERNORATES = [
   "Ariana", "Béja", "Ben Arous", "Bizerte", "Gabès", "Gafsa", "Jendouba",
   "Kairouan", "Kasserine", "Kébili", "Le Kef", "Mahdia", "La Manouba",
@@ -53,18 +50,7 @@ export const GOVERNORATES = [
   "Sousse", "Tataouine", "Tozeur", "Tunis", "Zaghouan",
 ];
 
-/** Image URL for a cart line item from its stored photo id (placeholder fallback). */
-export function photoImg(
-  photo: number | null | undefined,
-  name: string,
-  w?: number,
-  h?: number
-): string {
-  if (photo) return img(photo, w, h);
-  return placeholder((name || "BUREAU").toUpperCase(), { w, h });
-}
-
-/** Pexels CDN URL builder for product photography. */
+/** Photo Pexels (images fixes de la page d'accueil). */
 export function img(id: number, w?: number, h?: number): string {
   let u =
     "https://images.pexels.com/photos/" +
@@ -86,7 +72,7 @@ interface PlaceholderOpts {
   fs?: number;
 }
 
-/** Striped SVG placeholder — fallback for products without a photo. */
+/** Visuel rayé de secours pour un produit sans photo. */
 export function placeholder(label: string, opts: PlaceholderOpts = {}): string {
   const w = opts.w || 800;
   const h = opts.h || 600;
@@ -105,12 +91,12 @@ export function placeholder(label: string, opts: PlaceholderOpts = {}): string {
   return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
 }
 
-export function productImg(p: Product | undefined, w?: number, h?: number): string {
-  if (p && p.photo) return img(p.photo, w, h);
-  return placeholder(p && p.name ? p.name.toUpperCase() : "BUREAU", { w, h });
+/** Image d'un produit ou d'une ligne du panier, avec le visuel de secours. */
+export function imageOr(url: string | null | undefined, name: string, w?: number, h?: number): string {
+  return url || placeholder((name || "BUREAU").toUpperCase(), { w, h });
 }
 
-/** Tunisian Dinar price formatting — e.g. 1529 → "1 529 DT". */
+/** Prix en dinars — ex. 1529 → "1 529 DT". */
 export function formatDT(n: number): string {
   return n.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, " ") + " DT";
 }

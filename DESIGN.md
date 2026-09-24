@@ -183,7 +183,7 @@ thin composition of section components in [`components/sections/`](components/se
 - **Cart state** is read/written only through `useCart()` (`lib/cart.tsx`).
 - **Server vs client.** Keep components server-rendered by default; add
   `"use client"` only for interactivity (cart counter, filters, forms, buy box).
-  Storefront pages fetch from Supabase with `export const dynamic = "force-dynamic"`.
+  Storefront pages fetch from Medusa with `export const dynamic = "force-dynamic"`.
 
 ---
 

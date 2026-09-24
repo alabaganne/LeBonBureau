@@ -2,7 +2,7 @@
    aussi" related grid. Links through to the product detail page. */
 
 import Link from "next/link";
-import { formatDT, productImg, type Product } from "@/lib/data";
+import { formatDT, imageOr, type Product } from "@/lib/data";
 import { ArrowRightIcon } from "./Icons";
 
 interface ProductCardProps {
@@ -25,7 +25,7 @@ export default function ProductCard({
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           className="w-full h-full object-cover transition-transform duration-[.4s] ease-[ease]"
-          src={productImg(p, imgWidth, imgHeight)}
+          src={imageOr(p.image, p.name, imgWidth, imgHeight)}
           alt={p.name}
           loading={lazy ? "lazy" : undefined}
         />

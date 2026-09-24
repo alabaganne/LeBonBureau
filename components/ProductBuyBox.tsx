@@ -4,16 +4,12 @@
    social proof (gated on real orders), stock urgency, add-to-cart, and the
    inline cash-on-delivery express order. Plus a sticky mobile order bar. */
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { formatDT, img, GOVERNORATES, type Product } from "@/lib/data";
-import { useCart } from "@/lib/cart";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { formatDT, imageOr, GOVERNORATES, type Product } from "@/lib/data";
+import { useCart, type AddEntry } from "@/lib/cart";
 import { useToast } from "@/lib/toast";
-import {
-  makeOrderNum,
-  ordersForProduct,
-  saveOrder,
-  type Order,
-} from "@/lib/orders";
+import { placeExpressOrder } from "@/lib/orders";
+import { pixel, pixelProduct } from "@/lib/track";
 import {
   StarIcon,
   CheckTinyIcon,
@@ -32,31 +28,35 @@ export default function ProductBuyBox({ product: p }: { product: Product }) {
   const { addToCart } = useCart();
   const { toast } = useToast();
 
-  const galleryIds = useMemo(
-    () => (p.photos && p.photos.length ? p.photos : p.photo ? [p.photo] : []),
-    [p]
-  );
   const galleryImg = (i: number) =>
-    galleryIds.length ? img(galleryIds[i % galleryIds.length], 900, 675) : "";
-  const thumbCount = galleryIds.length || 3;
+    imageOr(p.images.length ? p.images[i % p.images.length] : p.image, p.name, 900, 675);
+  const thumbCount = p.images.length || 3;
 
   const [mainIdx, setMainIdx] = useState(0);
   const [colorIdx, setColorIdx] = useState(0);
   const [sizeIdx, setSizeIdx] = useState(0);
   const [qty, setQty] = useState(1);
+  const [busy, setBusy] = useState(false);
   const [showExpress, setShowExpress] = useState(false);
-  const [done, setDone] = useState<Order | null>(null);
-  const [ordersPassed, setOrdersPassed] = useState(0);
+  const [done, setDone] = useState<{ firstName: string; ref: string } | null>(null);
   const [errors, setErrors] = useState<Partial<Record<ExpressField, boolean>>>({});
 
   const expressRef = useRef<HTMLDivElement>(null);
   const doneRef = useRef<HTMLDivElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
 
-  // Social proof reads the order count for this product from Supabase.
+  const color = p.colors[colorIdx]?.name ?? "";
+  const size = p.sizes[sizeIdx] ?? "";
+  const variant = p.variants.find(
+    (v) => (!p.colors.length || v.color === color) && (!p.sizes.length || v.size === size)
+  );
+  const price = variant?.price ?? p.price;
+  const oldPrice = variant ? variant.oldPrice : p.oldPrice;
+  const available = Boolean(variant) && (variant!.stock === null || variant!.stock > 0);
+
   useEffect(() => {
-    ordersForProduct(p.id).then(setOrdersPassed);
-  }, [p.id]);
+    pixel("ViewContent", pixelProduct(p.id, p.name, p.price));
+  }, [p.id, p.name, p.price]);
 
   // Reveal + focus the express form once it opens.
   useEffect(() => {
@@ -71,26 +71,34 @@ export default function ProductBuyBox({ product: p }: { product: Product }) {
     if (done) doneRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [done]);
 
-  const save = p.oldPrice ? p.oldPrice - p.price : 0;
+  const save = oldPrice ? oldPrice - price : 0;
   const warranty = (p.specs.find((s) => /garantie/i.test(s[0])) || ["", "5 ans"])[1];
 
-  function onAddToCart() {
-    addToCart({
-      id: p.id,
-      name: p.name,
-      color: p.colors[colorIdx].name,
-      size: p.sizes[sizeIdx],
-      price: p.price,
-      qty,
-      photo: p.photo,
-      categoryLabel: p.categoryLabel,
-    });
-    toast(`${qty}× ${p.name} (${p.colors[colorIdx].name}) ajouté au panier`);
+  function entry(): AddEntry | null {
+    if (!variant || !available) return null;
+    return { variantId: variant.id, qty, color, size, categoryLabel: p.categoryLabel };
+  }
+
+  async function onAddToCart() {
+    const e = entry();
+    if (!e || busy) return;
+    setBusy(true);
+    try {
+      await addToCart(e);
+      pixel("AddToCart", pixelProduct(p.id, p.name, price, qty));
+      toast(`${qty}× ${p.name}${color ? ` (${color})` : ""} ajouté au panier`);
+    } catch {
+      toast("Impossible d'ajouter au panier. Merci de réessayer.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   function openExpress() {
+    if (!entry()) return;
     setDone(null);
     setShowExpress(true);
+    pixel("InitiateCheckout", pixelProduct(p.id, p.name, price, qty));
   }
 
   function clearError(field: ExpressField) {
@@ -127,53 +135,38 @@ export default function ProductBuyBox({ product: p }: { product: Product }) {
       return;
     }
 
+    const item = entry();
+    if (!item || busy) return;
     const parts = name.split(/\s+/);
     const first = parts.shift() || name;
-    const last = parts.join(" ");
-    const order: Order = {
-      num: makeOrderNum(),
-      createdAt: new Date().toISOString(),
-      status: "nouvelle",
-      firstName: first,
-      lastName: last,
-      phone,
-      email: "",
-      address: addr,
-      address2: "",
-      city,
-      gov,
-      zip: "",
-      landmark: "",
-      notes: "Commande express (fiche produit)",
-      payment: "cod",
-      items: [
-        {
-          id: p.id,
-          name: p.name,
-          color: p.colors[colorIdx].name,
-          size: p.sizes[sizeIdx],
-          price: p.price,
-          qty,
-          photo: p.photo,
-          categoryLabel: p.categoryLabel,
-        },
-      ],
-      total: p.price * qty,
-    };
-
+    setBusy(true);
     try {
-      await saveOrder(order);
+      const order = await placeExpressOrder(item, {
+        firstName: first,
+        lastName: parts.join(" "),
+        phone,
+        email: "",
+        address: addr,
+        address2: "",
+        city,
+        gov,
+        zip: "",
+        landmark: "",
+        notes: "",
+      });
+      setShowExpress(false);
+      setDone({ firstName: first, ref: order.ref });
+      toast(`Commande ${order.ref} enregistrée`);
     } catch {
       toast("Une erreur est survenue. Merci de réessayer.");
-      return;
+    } finally {
+      setBusy(false);
     }
-    setShowExpress(false);
-    setDone(order);
-    toast(`Commande ${order.num} enregistrée`);
   }
 
-  const showRating = p.rating && ordersPassed > 9;
-  const stockLow = p.stock <= 5;
+  const showRating = p.rating && p.orders > 9;
+  const stock = variant?.stock ?? null;
+  const stockLow = stock !== null && stock <= 5;
 
   return (
     <>
@@ -213,7 +206,7 @@ export default function ProductBuyBox({ product: p }: { product: Product }) {
                 </span>
                 <span className="font-bold text-[15px]">{p.rating.toFixed(1)}</span>
                 <span className="text-[13.5px] text-ink-faint">
-                  {p.reviews} avis · {ordersPassed} commandés
+                  {p.reviews} avis · {p.orders} commandés
                 </span>
               </div>
             )}
@@ -221,24 +214,26 @@ export default function ProductBuyBox({ product: p }: { product: Product }) {
             <p className="text-[18px] text-ink-soft mt-0 mb-6">{p.sub}</p>
 
             <div className="flex items-baseline gap-[12px] mb-[6px]">
-              <span className="text-[34px] font-bold tracking-[-.02em]">{formatDT(p.price)}</span>
-              {p.oldPrice && <span className="text-[19px] text-ink-faint line-through">{formatDT(p.oldPrice)}</span>}
+              <span className="text-[34px] font-bold tracking-[-.02em]">{formatDT(price)}</span>
+              {oldPrice && <span className="text-[19px] text-ink-faint line-through">{formatDT(oldPrice)}</span>}
               {save > 0 && <span className="text-[13px] font-bold text-white bg-clay px-[10px] py-[4px] rounded-full">− {formatDT(save)}</span>}
             </div>
             <p className="text-[13.5px] text-ink-faint mt-0 mb-[26px]">TVA comprise · Livraison offerte partout en Tunisie</p>
 
-            <div className={"inline-flex items-center gap-2 text-[14px] font-semibold mb-6 " + (stockLow ? "text-clay" : "text-green")}>
-              <span className={"w-[8px] h-[8px] rounded-full flex-none " + (stockLow ? "bg-clay shadow-[0_0_0_4px_#f6e7e0]" : "bg-green shadow-[0_0_0_4px_var(--color-green-soft)]")} />
-              {stockLow
-                ? `Plus que ${p.stock} en stock — expédié sous 48 h`
-                : "En stock · expédié sous 48 h"}
+            <div className={"inline-flex items-center gap-2 text-[14px] font-semibold mb-6 " + (stockLow || !available ? "text-clay" : "text-green")}>
+              <span className={"w-[8px] h-[8px] rounded-full flex-none " + (stockLow || !available ? "bg-clay shadow-[0_0_0_4px_#f6e7e0]" : "bg-green shadow-[0_0_0_4px_var(--color-green-soft)]")} />
+              {!available
+                ? "Indisponible dans cette version — choisissez une autre finition ou dimension"
+                : stockLow
+                  ? `Plus que ${stock} en stock — expédié sous 48 h`
+                  : "En stock · expédié sous 48 h"}
             </div>
 
             <p className="text-ink-soft text-[16.5px] leading-[1.6] mt-0 mb-[30px] max-w-[50ch]">{p.desc}</p>
 
-            <div className="mb-[26px]">
+            {p.colors.length > 0 && <div className="mb-[26px]">
               <div className="flex justify-between items-baseline text-[14px] font-semibold mb-[12px]">
-                Finition <span className="text-ink-soft font-medium">{p.colors[colorIdx].name}</span>
+                Finition <span className="text-ink-soft font-medium">{color}</span>
               </div>
               <div className="flex gap-[12px]">
                 {p.colors.map((c, i) => (
@@ -253,11 +248,11 @@ export default function ProductBuyBox({ product: p }: { product: Product }) {
                   </button>
                 ))}
               </div>
-            </div>
+            </div>}
 
-            <div className="mb-[26px]">
+            {p.sizes.length > 0 && <div className="mb-[26px]">
               <div className="flex justify-between items-baseline text-[14px] font-semibold mb-[12px]">
-                Dimensions <span className="text-ink-soft font-medium">{p.sizes[sizeIdx]}</span>
+                Dimensions <span className="text-ink-soft font-medium">{size}</span>
               </div>
               <div className="flex flex-wrap gap-[10px]">
                 {p.sizes.map((s, i) => (
@@ -270,7 +265,7 @@ export default function ProductBuyBox({ product: p }: { product: Product }) {
                   </button>
                 ))}
               </div>
-            </div>
+            </div>}
 
             <div className="flex gap-[14px] items-stretch mt-[30px] mb-6 max-[560px]:flex-wrap">
               <div className="flex items-center border border-line rounded-full overflow-hidden">
@@ -282,11 +277,11 @@ export default function ProductBuyBox({ product: p }: { product: Product }) {
                   +
                 </button>
               </div>
-              <Button variant="primary" size="lg" style={{ flex: 1 }} onClick={openExpress}>
+              <Button variant="primary" size="lg" style={{ flex: 1 }} onClick={openExpress} disabled={!available} className={available ? "" : "opacity-60 cursor-not-allowed"}>
                 Commander maintenant
               </Button>
             </div>
-            <Button variant="ghost" size="lg" block style={{ marginBottom: 6 }} onClick={onAddToCart}>
+            <Button variant="ghost" size="lg" block style={{ marginBottom: 6 }} onClick={onAddToCart} disabled={!available || busy} className={available ? "" : "opacity-60 cursor-not-allowed"}>
               <CartIcon size={18} strokeWidth={1.9} />
               Ajouter au panier
             </Button>
@@ -313,10 +308,10 @@ export default function ProductBuyBox({ product: p }: { product: Product }) {
                   <div className="flex-1 leading-[1.3]">
                     <div className="font-bold text-[15px]">{p.name}</div>
                     <div className="text-[12.5px] text-ink-soft">
-                      {p.colors[colorIdx].name} · {p.sizes[sizeIdx]} · Qté {qty}
+                      {[color, size].filter(Boolean).join(" · ")} · Qté {qty}
                     </div>
                   </div>
-                  <div className="font-serif text-[18px] font-semibold whitespace-nowrap">{formatDT(p.price * qty)}</div>
+                  <div className="font-serif text-[18px] font-semibold whitespace-nowrap">{formatDT(price * qty)}</div>
                 </div>
                 <form onSubmit={onSubmitExpress} noValidate>
                   <div className="grid grid-cols-2 gap-x-[16px] gap-y-[14px] mb-[16px] max-[720px]:grid-cols-1">
@@ -373,8 +368,8 @@ export default function ProductBuyBox({ product: p }: { product: Product }) {
                       />
                     </div>
                   </div>
-                  <Button variant="primary" size="lg" block type="submit" style={{ marginTop: 4 }}>
-                    Valider ma commande
+                  <Button variant="primary" size="lg" block type="submit" style={{ marginTop: 4 }} disabled={busy}>
+                    {busy ? "Envoi…" : "Valider ma commande"}
                   </Button>
                   <p className="text-[12.5px] text-ink-faint text-center mt-[14px]" style={{ marginTop: 12 }}>
                     En validant, vous acceptez nos{" "}
@@ -392,7 +387,7 @@ export default function ProductBuyBox({ product: p }: { product: Product }) {
                 <div className="w-[60px] h-[60px] rounded-full bg-green text-white grid place-items-center mt-0 mx-auto mb-[16px] shadow-[0_10px_26px_-10px_rgba(31,93,76,.5)]"><CheckBigIcon size={30} /></div>
                 <h3 className="text-[23px] mb-[8px]">Merci {done.firstName}, commande confirmée !</h3>
                 <p className="text-ink-soft text-[14.5px] mt-0 mx-auto mb-[16px] max-w-[38ch]">Merci, nous vous appelons très vite pour convenir d&apos;un créneau de livraison.</p>
-                <div className="font-serif text-[20px] font-semibold text-green-deep mb-[20px]">{done.num}</div>
+                <div className="font-serif text-[20px] font-semibold text-green-deep mb-[20px]">{done.ref}</div>
                 <div>
                   <Button href="/#catalogue" variant="dark">Continuer mes achats</Button>
                 </div>

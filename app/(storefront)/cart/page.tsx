@@ -4,8 +4,8 @@
    and an empty state. */
 
 import Link from "next/link";
-import { formatDT, photoImg } from "@/lib/data";
-import { itemKey, useCart, type CartItem } from "@/lib/cart";
+import { formatDT, imageOr } from "@/lib/data";
+import { useCart, type CartItem } from "@/lib/cart";
 import { useToast } from "@/lib/toast";
 import Button from "@/components/Button";
 import { ArrowLeftIcon, PlusIcon, TrashIcon, CartIcon, LockIcon } from "@/components/Icons";
@@ -16,21 +16,24 @@ export default function CartPage() {
 
   const heading = qty > 0 ? `Mon panier · ${qty} article${qty > 1 ? "s" : ""}` : "Mon panier";
 
+  // En cas d'échec (réseau, stock), on prévient au lieu de laisser le panier figé.
+  const safely = (action: Promise<void>, done?: string) =>
+    action.then(() => done && toast(done)).catch(() => toast("Action impossible. Merci de réessayer."));
+
   function CartRow({ it }: { it: CartItem }) {
-    const key = itemKey(it);
     const cat = it.categoryLabel || "Bureau";
     return (
       <div className="grid grid-cols-[104px_1fr_auto] gap-5 items-center py-6 border-b border-line first:pt-1 max-[560px]:grid-cols-[80px_1fr] max-[560px]:gap-[14px] max-[560px]:[grid-template-areas:'thumb_info'_'right_right']">
         <div className="w-[104px] h-[84px] rounded-[12px] overflow-hidden bg-sand-deep border border-line max-[560px]:w-20 max-[560px]:h-[70px] max-[560px]:[grid-area:thumb]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={photoImg(it.photo, it.name, 320, 240)} alt={it.name} className="w-full h-full object-cover" />
+          <img src={imageOr(it.image, it.name, 320, 240)} alt={it.name} className="w-full h-full object-cover" />
         </div>
         <div className="max-[560px]:[grid-area:info]">
           <div className="text-[11.5px] tracking-[.12em] uppercase font-semibold text-green">{cat}</div>
           <div className="font-serif text-6 leading-[1.1] mt-[3px] mb-[6px]">{it.name}</div>
           <div className="text-[13.5px] text-ink-soft flex flex-wrap gap-x-[14px] gap-y-[6px]">
-            <span>Finition&nbsp;: <b className="text-ink font-semibold">{it.color}</b></span>
-            <span>Dimensions&nbsp;: <b className="text-ink font-semibold">{it.size}</b></span>
+            {it.color && <span>Finition&nbsp;: <b className="text-ink font-semibold">{it.color}</b></span>}
+            {it.size && <span>Dimensions&nbsp;: <b className="text-ink font-semibold">{it.size}</b></span>}
           </div>
           <div className="text-[13px] text-ink-faint mt-2">{formatDT(it.price)} / l&apos;unité</div>
         </div>
@@ -38,16 +41,13 @@ export default function CartPage() {
           <div className="text-[20px] font-bold tracking-[-.01em] whitespace-nowrap">{formatDT(it.price * it.qty)}</div>
           <div className="flex items-center gap-[14px]">
             <div className="border border-line rounded-full inline-flex items-center overflow-hidden">
-              <button type="button" aria-label="Diminuer" className="w-[36px] h-10 border-0 bg-white text-[18px] text-ink hover:bg-sand" onClick={() => setItemQty(key, it.qty - 1)}>–</button>
+              <button type="button" aria-label="Diminuer" className="w-[36px] h-10 border-0 bg-white text-[18px] text-ink hover:bg-sand" onClick={() => safely(setItemQty(it.id, it.qty - 1))}>–</button>
               <span className="min-w-[30px] text-center font-semibold text-[15px]">{it.qty}</span>
-              <button type="button" aria-label="Augmenter" className="w-[36px] h-10 border-0 bg-white text-[18px] text-ink hover:bg-sand" onClick={() => setItemQty(key, it.qty + 1)}>+</button>
+              <button type="button" aria-label="Augmenter" className="w-[36px] h-10 border-0 bg-white text-[18px] text-ink hover:bg-sand" onClick={() => safely(setItemQty(it.id, it.qty + 1))}>+</button>
             </div>
             <button
               className="inline-flex items-center gap-1.5 border-0 bg-transparent text-ink-faint text-[13px] font-medium p-1.5 transition-colors duration-150 hover:text-clay"
-              onClick={() => {
-                removeItem(key);
-                toast(`${it.name} retiré du panier`);
-              }}
+              onClick={() => safely(removeItem(it.id), `${it.name} retiré du panier`)}
             >
               <TrashIcon size={15} />
               Retirer
@@ -88,7 +88,7 @@ export default function CartPage() {
           <div>
             <div className="flex flex-col gap-0">
               {items.map((it) => (
-                <CartRow key={itemKey(it)} it={it} />
+                <CartRow key={it.id} it={it} />
               ))}
             </div>
             <div className="flex justify-between items-center mt-6 flex-wrap gap-[14px]">
@@ -127,7 +127,7 @@ export default function CartPage() {
             <Button href="/checkout" variant="primary" size="lg" block>Passer la commande</Button>
             <p className="text-[12.5px] text-ink-faint mt-[14px] flex gap-2 items-start">
               <LockIcon size={15} className="flex-none text-green mt-px" />
-              Paiement à la livraison ou par carte. Vos données restent confidentielles.
+              Paiement à la livraison. Vos données restent confidentielles.
             </p>
           </aside>
         </main>

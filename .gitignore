@@ -22,10 +22,12 @@ yarn-error.log*
 # local env files
 .env*.local
 
-# supabase local
-/supabase/.temp
-/supabase/.branches
-
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# prod env (VPS)
+.env
+
+# local credentials
+credentials.md

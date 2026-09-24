@@ -1,9 +1,12 @@
-/* LeBonBureau — shared storefront footer. Static; safe as a server component. */
+/* LeBonBureau — shared storefront footer (server component; catalogue links come from Medusa). */
 
 import Link from "next/link";
+import { getCategories } from "@/lib/products";
 import { FacebookIcon, InstagramIcon } from "./Icons";
 
-export default function SiteFooter() {
+export default async function SiteFooter() {
+  // Le pied de page ne doit pas casser la page si Medusa ne répond pas.
+  const categories = await getCategories().catch(() => []);
   return (
     <footer className="bg-ink text-[#cfcdc4] mt-2">
       <div className="wrap grid grid-cols-[1.6fr_1fr_1fr_1fr] gap-10 pt-[72px] pb-14 max-[860px]:grid-cols-2 max-[860px]:gap-8 max-[560px]:grid-cols-1">
@@ -40,9 +43,11 @@ export default function SiteFooter() {
         <div>
           <h4 className="font-sans text-[13px] tracking-[.12em] uppercase text-[#8c8a80] font-semibold mb-[18px]">Catalogue</h4>
           <ul className="list-none m-0 p-0 flex flex-col gap-[11px] text-[15px]">
-            <li><Link className="transition-colors duration-150 ease-[ease] hover:text-white" href="/#catalogue">Gaming</Link></li>
-            <li><Link className="transition-colors duration-150 ease-[ease] hover:text-white" href="/#catalogue">Programmation</Link></li>
-            <li><Link className="transition-colors duration-150 ease-[ease] hover:text-white" href="/#catalogue">Assis-debout</Link></li>
+            {categories.map((c) => (
+              <li key={c.handle}>
+                <Link className="transition-colors duration-150 ease-[ease] hover:text-white" href={`/?categorie=${c.handle}#catalogue`}>{c.name}</Link>
+              </li>
+            ))}
             <li><Link className="transition-colors duration-150 ease-[ease] hover:text-white" href="/#catalogue">Tous les bureaux</Link></li>
           </ul>
         </div>
@@ -68,14 +73,14 @@ export default function SiteFooter() {
       <div className="wrap border-t border-[rgba(255,255,255,.1)] pt-6 pb-10 flex justify-between text-[13.5px] text-[#8c8a80]">
         <span>© 2026 LeBonBureau — Tous droits réservés.</span>
         <span>
-          Paiement sécurisé · Visa · Mastercard · à la livraison ·{" "}
-          <Link
+          Paiement à la livraison ·{" "}
+          <a
             className="text-[#cfcdc4] transition-colors duration-150 ease-[ease] hover:text-white"
-            href="/admin/login"
+            href="/admin"
             style={{ textDecoration: "underline" }}
           >
             Espace pro
-          </Link>
+          </a>
         </span>
       </div>
     </footer>

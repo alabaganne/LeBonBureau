@@ -3,7 +3,7 @@
 
 import Button from "@/components/Button";
 import { CheckIcon } from "@/components/Icons";
-import { img } from "@/lib/data";
+import { imageOr } from "@/lib/data";
 
 const PROMISES = [
   "Hauteur adaptée à votre taille pour une posture neutre.",
@@ -12,7 +12,8 @@ const PROMISES = [
   "Matériaux durables, garantis plusieurs années.",
 ];
 
-export default function GreenBand() {
+/** `image` : une photo du catalogue, choisie par la page d'accueil. */
+export default function GreenBand({ image }: { image?: string }) {
   return (
     <div className="wrap">
       <section className="bg-green text-white rounded-card-lg my-20 overflow-hidden" id="engagements">
@@ -40,7 +41,7 @@ export default function GreenBand() {
           </div>
           <div className="bg-green-deep relative min-h-[340px] max-[960px]:min-h-[240px] max-[960px]:order-[-1]">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img className="absolute inset-0 w-full h-full object-cover opacity-90" src={img(30469967, 760, 760)} alt="Espace de travail ergonomique" />
+            <img className="absolute inset-0 w-full h-full object-cover opacity-90" src={imageOr(image, "LeBonBureau", 760, 760)} alt="Espace de travail ergonomique" />
           </div>
         </div>
       </section>

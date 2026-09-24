@@ -6,8 +6,8 @@
 
 ## 0. Where we are today
 
-- ✅ E-commerce platform live (Next.js + Supabase): landing, product, cart, checkout, admin.
-- ✅ Dynamic product catalogue backed by Supabase `products` table.
+- ✅ E-commerce platform live (Next.js shop + Medusa backend): landing, product, cart, checkout, Medusa admin.
+- ✅ Product catalogue, stock and orders managed in Medusa.
 - ⬜ No physical product validated yet.
 - ⬜ No paying customers / no marketing channels active.
 
